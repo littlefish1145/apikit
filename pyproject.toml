@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apistd"
+version = "1.0.0"
+description = "API Response Standardization: Unified API output format for your projects"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "apistd contributors"}
+]
+keywords = ["api", "response", "standardization", "fastapi", "flask", "rest", "json"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: HTTP",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.68.0"]
+flask = ["flask>=2.0.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.18.0", "black>=22.0.0", "mypy>=0.950"]
+
+[project.urls]
+Homepage = "https://github.com/apistd/apistd"
+Documentation = "https://github.com/apistd/apistd#readme"
+Repository = "https://github.com/apistd/apistd"
+Issues = "https://github.com/apistd/apistd/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apistd*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
