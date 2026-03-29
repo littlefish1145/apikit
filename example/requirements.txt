@@ -1,4 +1,10 @@
+# FastAPI dependencies
 fastapi>=0.68.0
 uvicorn>=0.15.0
 pydantic>=1.8.0
+
+# Flask dependencies
+flask>=2.0.0
+
+# Common dependencies
 psutil>=5.8.0
