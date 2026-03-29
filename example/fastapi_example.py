@@ -15,7 +15,7 @@ from apistd import (
     get_request_id, get_execution_time,
     register_format, ResponseFormatterRegistry
 )
-from apistd.core.exceptions import ValidationError, NotFoundError, DatabaseError
+from core.exceptions import ValidationError, NotFoundError, DatabaseError
 
 app = FastAPI()
 

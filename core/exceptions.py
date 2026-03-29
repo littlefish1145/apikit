@@ -2,8 +2,8 @@ import traceback
 import sys
 import linecache
 from typing import Any, Optional, List, Dict
-from apistd.core.response import ErrorResponse
-from apistd.core.status import HTTPStatusMapper
+from core.response import ErrorResponse
+from core.status import HTTPStatusMapper
 
 
 def _get_traceback_list(exc: Exception) -> List[Dict]:

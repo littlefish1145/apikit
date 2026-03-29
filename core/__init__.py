@@ -1,6 +1,6 @@
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.status import StatusCode, HTTPStatusMapper
-from apistd.core.exceptions import (
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.status import StatusCode, HTTPStatusMapper
+from core.exceptions import (
     APIException,
     ValidationError,
     AuthenticationError,
@@ -8,7 +8,7 @@ from apistd.core.exceptions import (
     NotFoundError,
     InternalError
 )
-from apistd.core.constants import ResponseFields, ErrorCodes, ConfigKeys
+from core.constants import ResponseFields, ErrorCodes, ConfigKeys
 
 __all__ = [
     "Response",

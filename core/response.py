@@ -3,9 +3,9 @@ import time
 import psutil
 import os
 from typing import Any, Optional, Dict
-from apistd.core.constants import ResponseFields
-from apistd.config import get_config
-from apistd.formats.registry import ResponseFormatterRegistry
+from core.constants import ResponseFields
+from config import get_config
+from formats.registry import ResponseFormatterRegistry
 
 
 class Response:

@@ -42,7 +42,7 @@ Issues = "https://github.com/apistd/apistd/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["apistd*"]
+include = ["config*", "core*", "debug*", "extensions*", "formats*", "framework*", "middleware*", "migration*"]
 
 [tool.black]
 line-length = 100

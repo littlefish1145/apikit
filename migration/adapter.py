@@ -1,51 +1,6 @@
 from typing import Any, Dict, Optional
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.constants import ResponseFields
-
-
-class CompatibilityWrapper:
-    def __init__(self, old_format_map: Dict[str, str] = None):
-        self.old_format_map = old_format_map or {
-            "status": "code",
-            "msg": "message",
-            "result": "data",
-            "code": "code",
-            "error": "message",
-        }
-
-    def convert(self, old_response: Any) -> Response:
-        if isinstance(old_response, dict):
-            mapped = {}
-            for old_key, new_key in self.old_format_map.items():
-                if old_key in old_response:
-                    mapped[new_key] = old_response[old_key]
-
-            if ResponseFields.CODE not in mapped:
-                mapped[ResponseFields.CODE] = 0 if "error" not in old_response else -1
-
-            return Response.from_dict(mapped)
-        elif isinstance(old_response, (list, str, int, float, bool)):
-            return SuccessResponse(data=old_response)
-        else:
-            return SuccessResponse(data=str(old_response))
-
-    def adapt(self, response: Response, old_format: str = None) -> Dict:
-        result = response.to_dict()
-
-        if old_format == "jsonrpc":
-            return {
-                "id": 1,
-                "result": result.get(ResponseFields.DATA),
-                "error": None if response.code == 0 else result.get(ResponseFields.MESSAGE)
-            }
-        elif old_format == "grpc":
-            return {
-                "code": response.code,
-                "message": response.message,
-                "data": result.get(ResponseFields.DATA),
-            }
-
-        return result
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.constants import ResponseFields
 
 
 class ResponseAdapter:
@@ -70,6 +25,9 @@ class ResponseAdapter:
             for key, value in old_response.items():
                 if key not in self.old_key_map:
                     new_data[key] = value
+
+            if ResponseFields.CODE not in new_data:
+                new_data[ResponseFields.CODE] = 0
 
             return Response.from_dict(new_data)
 
@@ -101,7 +59,15 @@ class FormatConverter:
             for old_key, new_key in mapping.items():
                 if old_key in data:
                     mapped[new_key] = data[old_key]
+
+            if ResponseFields.CODE not in mapped:
+                mapped[ResponseFields.CODE] = 0
+
             return Response.from_dict(mapped)
+
+        if ResponseFields.CODE not in data:
+            data[ResponseFields.CODE] = 0
+
         return Response.from_dict(data)
 
     @staticmethod

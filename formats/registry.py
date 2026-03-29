@@ -33,7 +33,7 @@ def register_format(name: str, formatter: Callable) -> None:
 
 
 def _default_formatter(code: int, message: str, data: Any, debug_info: Dict = None) -> dict:
-    from apistd.core.constants import ResponseFields
+    from core.constants import ResponseFields
     result = {
         ResponseFields.CODE: code,
         ResponseFields.MESSAGE: message,

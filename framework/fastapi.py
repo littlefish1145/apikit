@@ -11,11 +11,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.exceptions import APIException
-from apistd.framework.base import FrameworkAdapter
-from apistd.config import get_config
-from apistd.middleware.request_id import get_request_id, get_request_start_time
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.exceptions import APIException
+from framework.base import FrameworkAdapter
+from config import get_config
+from middleware.request_id import get_request_id, get_request_start_time
 
 
 class FormattedJSONResponse(StarletteResponse):
@@ -61,7 +61,7 @@ class FastAPIAdapter(FrameworkAdapter):
         app.add_exception_handler(Exception, self._handle_generic_exception)
 
     async def _middleware_dispatch(self, request: Request, call_next):
-        from apistd.middleware.request_id import RequestIDMiddleware
+        from middleware.request_id import RequestIDMiddleware
 
         config = get_config()
         start_time = time.time()

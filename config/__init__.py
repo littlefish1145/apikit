@@ -1,4 +1,4 @@
-from apistd.config.default import (
+from config.default import (
     ConfigSchema,
     DEFAULT_CONFIG,
     validate_config,

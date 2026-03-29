@@ -1,6 +1,6 @@
 from typing import Any, Callable, Optional
 from functools import wraps
-from apistd.migration.adapter import ResponseAdapter
+from migration.adapter import ResponseAdapter
 
 
 class MigrationWrapper:

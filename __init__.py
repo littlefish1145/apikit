@@ -1,6 +1,6 @@
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.status import StatusCode, HTTPStatusMapper
-from apistd.core.exceptions import (
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.status import StatusCode, HTTPStatusMapper
+from core.exceptions import (
     APIException,
     ValidationError,
     AuthenticationError,
@@ -9,10 +9,10 @@ from apistd.core.exceptions import (
     InternalError,
     DatabaseError
 )
-from apistd.core.constants import ResponseFields, ErrorCodes, ConfigKeys
-from apistd.extensions.pagination import PageResult, paginate, create_page_result
-from apistd.config import ConfigSchema, configure, get_config
-from apistd.framework import (
+from core.constants import ResponseFields, ErrorCodes, ConfigKeys
+from extensions.pagination import PageResult, paginate, create_page_result
+from config import ConfigSchema, configure, get_config
+from framework import (
     FrameworkAdapter,
     FastAPIAdapter,
     FlaskAdapter,
@@ -23,14 +23,14 @@ from apistd.framework import (
     FormattedJSONResponse,
     formatted_jsonify
 )
-from apistd.middleware import (
+from middleware import (
     RequestIDMiddleware,
     TimerMiddleware,
     DebugMiddleware,
     get_request_id,
     get_execution_time
 )
-from apistd.formats import (
+from formats import (
     AlibabaFormat,
     StandardFormat,
     SimpleFormat,

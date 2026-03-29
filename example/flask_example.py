@@ -14,8 +14,8 @@ from apistd import (
     get_request_id, get_execution_time,
     register_format, ResponseFormatterRegistry
 )
-from apistd.core.exceptions import ValidationError, NotFoundError, DatabaseError
-from apistd.framework.flask import formatted_jsonify
+from core.exceptions import ValidationError, NotFoundError, DatabaseError
+from framework.flask import formatted_jsonify
 
 app = Flask(__name__)
 

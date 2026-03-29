@@ -7,11 +7,11 @@ from typing import Callable, Optional, Any, Dict
 from flask import Flask, request, jsonify, Response as FlaskResponse, make_response
 from functools import wraps
 
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.exceptions import APIException
-from apistd.framework.base import FrameworkAdapter
-from apistd.config import get_config
-from apistd.middleware.request_id import get_request_id, set_request_id, get_request_start_time
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.exceptions import APIException
+from framework.base import FrameworkAdapter
+from config import get_config
+from middleware.request_id import get_request_id, set_request_id, get_request_start_time
 
 
 def formatted_jsonify(data, indent=2, ensure_ascii=False):
@@ -82,7 +82,7 @@ class FlaskAdapter(FrameworkAdapter):
 
     def _before_request(self):
         self._request_start_time = time.time()
-        from apistd.middleware.request_id import set_request_start_time
+        from middleware.request_id import set_request_start_time
         set_request_start_time(self._request_start_time)
 
         request_id = request.headers.get("X-Request-ID")

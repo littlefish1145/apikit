@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from apistd.core.response import Response, SuccessResponse
+from core.response import Response, SuccessResponse
 
 
 class PageResult:

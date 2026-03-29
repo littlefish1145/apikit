@@ -1,6 +1,6 @@
 from typing import Any, Dict, Callable, Optional
-from apistd.core.response import Response, SuccessResponse, ErrorResponse
-from apistd.core.constants import ResponseFields
+from core.response import Response, SuccessResponse, ErrorResponse
+from core.constants import ResponseFields
 
 
 class ResponseTransformer:

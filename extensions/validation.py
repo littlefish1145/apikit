@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from apistd.core.response import ErrorResponse
+from core.response import ErrorResponse
 
 
 class ValidationErrorFormatter:
