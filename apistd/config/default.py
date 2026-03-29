@@ -8,7 +8,7 @@ DEFAULT_CONFIG = {
     "enable_timing": True,
     "enable_sql_log": False,
     "slow_query_threshold": 100,
-    "response_formatter": None,
+    "response_format": "default",
     "before_hooks": [],
     "after_hooks": [],
     "timestamp_format": "iso",
@@ -23,7 +23,7 @@ class ConfigSchema:
     enable_timing: bool = True
     enable_sql_log: bool = False
     slow_query_threshold: float = 100
-    response_formatter: Optional[Callable] = None
+    response_format: str = "default"
     before_hooks: List[Callable] = field(default_factory=list)
     after_hooks: List[Callable] = field(default_factory=list)
     timestamp_format: str = "iso"
@@ -36,7 +36,7 @@ class ConfigSchema:
             "enable_timing": self.enable_timing,
             "enable_sql_log": self.enable_sql_log,
             "slow_query_threshold": self.slow_query_threshold,
-            "response_formatter": self.response_formatter,
+            "response_format": self.response_format,
             "before_hooks": self.before_hooks,
             "after_hooks": self.after_hooks,
             "timestamp_format": self.timestamp_format,

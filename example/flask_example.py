@@ -3,21 +3,21 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
+from flask import Flask, request
 
 from apistd import (
     SuccessResponse, ErrorResponse,
     StatusCode, APIException,
     PageResult, paginate,
-    FastAPIAdapter, FormattedJSONResponse,
+    FlaskAdapter,
     configure, get_config,
     get_request_id, get_execution_time,
     register_format, ResponseFormatterRegistry
 )
 from apistd.core.exceptions import ValidationError, NotFoundError, DatabaseError
+from apistd.framework.flask import formatted_jsonify
 
-app = FastAPI()
+app = Flask(__name__)
 
 
 def my_custom_formatter(code: int, message: str, data, debug_info: dict = None) -> dict:
@@ -36,14 +36,8 @@ register_format("my_custom", my_custom_formatter)
 
 configure(debug=False, enable_timing=True, slow_query_threshold=500, response_format="my_custom")
 
-adapter = FastAPIAdapter()
+adapter = FlaskAdapter()
 adapter.install(app)
-
-
-class User(BaseModel):
-    id: int
-    name: str
-    email: str
 
 
 users_db = [
@@ -54,19 +48,22 @@ users_db = [
 
 
 def json_response(response):
-    return FormattedJSONResponse(content=response.to_dict(), status_code=response.code)
+    return formatted_jsonify(response.to_dict()), response.code
 
 
-@app.get("/")
-async def root():
+@app.route("/")
+def root():
     return json_response(SuccessResponse(
-        data={"message": "Welcome to apistd FastAPI Example"},
+        data={"message": "Welcome to apistd Flask Example"},
         message="Welcome"
     ))
 
 
-@app.get("/users")
-async def list_users(page: int = 1, page_size: int = 10):
+@app.route("/users", methods=["GET"])
+def list_users():
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 10))
+
     start = (page - 1) * page_size
     end = start + page_size
     items = users_db[start:end]
@@ -75,8 +72,8 @@ async def list_users(page: int = 1, page_size: int = 10):
     return json_response(result.to_response())
 
 
-@app.get("/users/{user_id}")
-async def get_user(user_id: int):
+@app.route("/users/<int:user_id>", methods=["GET"])
+def get_user(user_id):
     user = next((u for u in users_db if u["id"] == user_id), None)
     if not user:
         raise NotFoundError(message=f"User with id {user_id} not found")
@@ -84,23 +81,27 @@ async def get_user(user_id: int):
     return json_response(SuccessResponse(data=user, message="User found"))
 
 
-@app.post("/users")
-async def create_user(req: User):
-    if "@" not in req.email:
+@app.route("/users", methods=["POST"])
+def create_user():
+    req = request.get_json()
+    name = req.get("name")
+    email = req.get("email")
+
+    if not email or "@" not in email:
         raise ValidationError(
             message="Invalid email format",
-            error_detail={"field": "email", "value": req.email}
+            error_detail={"field": "email", "value": email}
         )
 
     new_id = max(u["id"] for u in users_db) + 1
-    new_user = {"id": new_id, "name": req.name, "email": req.email}
+    new_user = {"id": new_id, "name": name, "email": email}
     users_db.append(new_user)
 
     return json_response(SuccessResponse(data=new_user, message="User created", code=StatusCode.CREATED))
 
 
-@app.delete("/users/{user_id}")
-async def delete_user(user_id: int):
+@app.route("/users/<int:user_id>", methods=["DELETE"])
+def delete_user(user_id):
     global users_db
     user = next((u for u in users_db if u["id"] == user_id), None)
     if not user:
@@ -111,21 +112,21 @@ async def delete_user(user_id: int):
     return json_response(SuccessResponse(data={"deleted": user_id}, message="User deleted"))
 
 
-@app.get("/debug/info")
-async def debug_info(request: Request):
+@app.route("/debug/info", methods=["GET"])
+def debug_info():
     return json_response(SuccessResponse(
         data={
             "request_id": get_request_id(),
             "execution_time_ms": get_execution_time(),
-            "path": request.url.path,
+            "path": request.path,
             "method": request.method,
         },
         message="Debug info"
     ))
 
 
-@app.get("/error/db")
-async def db_error():
+@app.route("/error/db", methods=["GET"])
+def db_error():
     raise DatabaseError(
         message="Database connection failed",
         error_detail={
@@ -142,8 +143,8 @@ async def db_error():
     )
 
 
-@app.get("/error/sample")
-async def sample_error():
+@app.route("/error/sample", methods=["GET"])
+def sample_error():
     raise APIException(
         message="This is a sample error",
         code=400,
@@ -152,8 +153,8 @@ async def sample_error():
     )
 
 
-@app.get("/config")
-async def show_config():
+@app.route("/config", methods=["GET"])
+def show_config():
     cfg = get_config()
     return json_response(SuccessResponse(
         data={
@@ -166,5 +167,4 @@ async def show_config():
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=5000, debug=False)

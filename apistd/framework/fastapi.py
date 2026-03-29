@@ -1,12 +1,47 @@
+import json
+import time
+import psutil
+import os
+import traceback
 from typing import Callable, Optional, Any
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response as StarletteResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from apistd.core.response import Response, SuccessResponse, ErrorResponse
 from apistd.core.exceptions import APIException
 from apistd.framework.base import FrameworkAdapter
 from apistd.config import get_config
+from apistd.middleware.request_id import get_request_id, get_request_start_time
+
+
+class FormattedJSONResponse(StarletteResponse):
+    default_indent = 2
+    default_ensure_ascii = False
+
+    def __init__(
+        self,
+        content: Any = None,
+        status_code: int = 200,
+        headers: dict = None,
+        media_type: str = "application/json",
+        background: Any = None,
+        indent: int = None,
+        ensure_ascii: bool = None
+    ):
+        self.indent = indent if indent is not None else self.default_indent
+        self.ensure_ascii = ensure_ascii if ensure_ascii is not None else self.default_ensure_ascii
+        super().__init__(content, status_code, headers, media_type, background)
+
+    def render(self, content: Any) -> bytes:
+        return json.dumps(
+            content,
+            indent=self.indent,
+            ensure_ascii=self.ensure_ascii
+        ).encode("utf-8")
 
 
 class FastAPIAdapter(FrameworkAdapter):
@@ -21,50 +56,110 @@ class FastAPIAdapter(FrameworkAdapter):
 
         app.add_middleware(BaseHTTPMiddleware, dispatch=self._middleware_dispatch)
         app.add_exception_handler(APIException, self._handle_api_exception)
+        app.add_exception_handler(RequestValidationError, self._handle_validation_error)
+        app.add_exception_handler(StarletteHTTPException, self._handle_http_exception)
+        app.add_exception_handler(Exception, self._handle_generic_exception)
 
     async def _middleware_dispatch(self, request: Request, call_next):
         from apistd.middleware.request_id import RequestIDMiddleware
-        from apistd.middleware.timer import TimerMiddleware
-        from apistd.middleware.debug import DebugMiddleware
 
         config = get_config()
+        start_time = time.time()
 
-        request_id_middleware = RequestIDMiddleware(
-            header_name=config.request_id_header
-        )
-        timer_middleware = TimerMiddleware(
-            threshold_ms=config.slow_query_threshold
-        )
-        debug_middleware = DebugMiddleware(enabled=config.debug)
-
+        request_id_middleware = RequestIDMiddleware(header_name=config.request_id_header)
         request_id_middleware.process_request(request)
+
         response = await call_next(request)
-        timer_middleware.process_response(request, response)
+
+        execution_time = (time.time() - start_time) * 1000
+        response.headers["X-Request-ID"] = request_id_middleware.get_request_id()
+        response.headers["X-Execution-Time"] = f"{execution_time:.2f}ms"
 
         if config.debug:
-            debug_middleware.process_response(request, response)
+            process = psutil.Process(os.getpid())
+            memory_mb = round(process.memory_info().rss / 1024 / 1024, 2)
+            response.headers["X-Debug-Memory"] = f"{memory_mb}MB"
 
-        response.headers["X-Request-ID"] = request_id_middleware.get_request_id()
         return response
 
+    def _get_response(self, error_response: ErrorResponse, status_code: int):
+        config = get_config()
+        if config.debug:
+            return FormattedJSONResponse(content=error_response.to_dict(debug=True), status_code=status_code)
+        return FormattedJSONResponse(content=error_response.to_dict(debug=False), status_code=status_code)
+
     async def _handle_api_exception(self, request: Request, exc: APIException):
-        error_response = exc.to_response()
-        return JSONResponse(
-            content=error_response.to_dict(),
-            status_code=exc.status_code
-        )
+        config = get_config()
+        error_response = exc.to_response(debug=config.debug)
+        return self._get_response(error_response, exc.status_code)
 
-    def response_handler(self, response: Response) -> JSONResponse:
-        http_status = 200 if response.code == 0 else 500
-        return JSONResponse(
-            content=response.to_dict(),
-            status_code=http_status
-        )
+    async def _handle_validation_error(self, request: Request, exc: RequestValidationError):
+        errors = []
+        for error in exc.errors():
+            errors.append({
+                "loc": list(error.get("loc", [])),
+                "msg": error.get("msg", ""),
+                "type": error.get("type", ""),
+                "input": error.get("input", ""),
+            })
 
-    def error_handler(self, exception: Exception) -> ErrorResponse:
+        error_response = ErrorResponse(
+            message="Validation failed",
+            code=422,
+            error_detail={
+                "type": "RequestValidationError",
+                "errors": errors,
+            }
+        )
+        return self._get_response(error_response, 422)
+
+    async def _handle_http_exception(self, request: Request, exc: StarletteHTTPException):
+        error_response = ErrorResponse(
+            message=str(exc.detail) if exc.detail else self._get_http_message(exc.status_code),
+            code=exc.status_code,
+            error_detail={
+                "type": "HTTPException",
+                "status_code": exc.status_code,
+            }
+        )
+        return self._get_response(error_response, exc.status_code)
+
+    async def _handle_generic_exception(self, request: Request, exc: Exception):
+        error_response = ErrorResponse(
+            message=str(exc) or "Internal server error",
+            code=500,
+            error_detail={
+                "type": type(exc).__name__,
+                "exception": str(exc),
+            }
+        )
+        return self._get_response(error_response, 500)
+
+    def _get_http_message(self, status_code: int) -> str:
+        messages = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            500: "Internal Server Error",
+            502: "Bad Gateway",
+            503: "Service Unavailable",
+        }
+        return messages.get(status_code, "HTTP Error")
+
+    def response_handler(self, response: Response, debug: bool = False) -> StarletteResponse:
+        config = get_config()
+        debug = debug or config.debug
+
+        if debug:
+            return FormattedJSONResponse(content=response.to_dict(debug=debug), status_code=response.code)
+        return FormattedJSONResponse(content=response.to_dict(debug=debug), status_code=response.code)
+
+    def error_handler(self, exception: Exception, debug: bool = False) -> ErrorResponse:
         if isinstance(exception, APIException):
-            return exception.to_response()
-        return ErrorResponse(message=str(exception), code=-1)
+            return exception.to_response(debug=debug)
+        return ErrorResponse(message=str(exception), code=500)
 
 
 class APIResponse:
@@ -78,15 +173,18 @@ class APIResponse:
         self.message = message
         self.data = data
 
-    def to_response(self) -> JSONResponse:
+    def to_response(self, debug: bool = False) -> StarletteResponse:
         if self.success:
             response = SuccessResponse(data=self.data, message=self.message)
         else:
-            response = ErrorResponse(message=self.message, code=-1)
-        return JSONResponse(
-            content=response.to_dict(),
-            status_code=200 if self.success else 500
-        )
+            response = ErrorResponse(message=self.message, code=500)
+
+        config = get_config()
+        debug = debug or config.debug
+
+        if debug:
+            return FormattedJSONResponse(content=response.to_dict(debug=debug), status_code=200 if self.success else 500)
+        return FormattedJSONResponse(content=response.to_dict(debug=debug), status_code=200 if self.success else 500)
 
 
 def inject_response(config: dict = None) -> Callable:
