@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        fail-fast: false  # Continue other builds even if one fails
+      fail-fast: false  # Continue other builds even if one fails
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
