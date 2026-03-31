@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"  # Disable incremental compilation for CI
   CARGO_NET_RETRY: "5"    # Retry failed downloads
+  PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"  # Allow Python 3.14+
 
 jobs:
   build:
