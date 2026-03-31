@@ -80,3 +80,9 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust backend compiled libraries (keep source, exclude binaries)
+optimization/backend/rust_backend.pyd
+optimization/backend/rust_backend_lib.so
+optimization/backend/rust_backend/target/
+optimization/backend/rust_backend/Cargo.lock

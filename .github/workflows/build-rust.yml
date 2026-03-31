@@ -1,0 +1,133 @@
+name: Build Rust Backend
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Rust Backend - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: librust_backend.so
+            asset_prefix: linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rust_backend.dll
+            asset_prefix: windows
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: librust_backend.dylib
+            asset_prefix: macos
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-action@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          optimization/backend/rust_backend/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('optimization/backend/rust_backend/Cargo.lock') }}
+
+    - name: Install dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3-dev
+
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install python
+
+    - name: Build Rust library (Release)
+      run: |
+        cd optimization/backend/rust_backend
+        cargo build --release --target ${{ matrix.target }}
+
+    - name: Copy compiled library to root
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          cp "optimization/backend/rust_backend/target/release/${{ matrix.artifact_name }}" "optimization/backend/rust_backend.pyd"
+        else
+          cp "optimization/backend/rust_backend/target/release/${{ matrix.artifact_name }}" "optimization/backend/rust_backend_lib.so"
+        fi
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pyo3
+
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v if (Test-Path tests/)
+
+    - name: Verify Rust backend
+      run: |
+        python -c "from optimization.backend import RustResponse, RUST_AVAILABLE; print(f'RUST_AVAILABLE: {RUST_AVAILABLE}'); assert RUST_AVAILABLE, 'Rust backend not available!'"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rust-backend-${{ matrix.asset_prefix }}-py${{ matrix.python-version }}
+        path: |
+          optimization/backend/rust_backend.pyd
+          optimization/backend/rust_backend_lib.so
+        if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create release archives
+      run: |
+        cd artifacts
+        for dir in */; do
+          cd "$dir"
+          zip -r ../${dir%/}.zip .
+          cd ..
+        done
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

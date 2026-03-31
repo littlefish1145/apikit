@@ -4,14 +4,16 @@
 //! - Fast JSON serialization (for better debug experience)
 //! - Efficient memory management (for large response handling)
 //! - Quick schema validation (for request validation)
+//! - Native response object (zero Python overhead)
 //! 
 //! Note: This is OPTIONAL. The core value of APISTD is in Python implementation.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyBytes, PyTuple};
-use serde_json::Value;
+use pyo3::types::{PyDict, PyList, PyBytes, PyString, PyBool, PyInt, PyFloat};
+use serde_json::{Value, Map};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// High-performance memory arena for zero-copy operations
 #[pyclass]
@@ -107,34 +109,35 @@ impl RustSchemaValidator {
         let mut rules = Vec::new();
         
         // Compile type check
-        if let Some(type_val) = schema.get_item("type")? {
-            if let Some(type_str) = type_val.downcast_ref::<PyString>() {
-                rules.push(ValidationRule::CheckType(type_str.to_str()?.to_string()));
+        if let Ok(Some(type_val)) = schema.get_item("type") {
+            if let Ok(type_str) = type_val.extract::<String>() {
+                rules.push(ValidationRule::CheckType(type_str));
             }
         }
         
         // Compile required fields
-        if let Some(required_val) = schema.get_item("required")? {
-            if let Some(list) = required_val.downcast_ref::<PyList>() {
-                let required: Vec<String> = list
-                    .iter()
-                    .filter_map(|item| item.downcast_ref::<PyString>().ok())
-                    .filter_map(|s| s.to_str().ok().map(String::from))
-                    .collect();
+        if let Ok(Some(required_val)) = schema.get_item("required") {
+            if let Ok(list) = required_val.downcast::<PyList>() {
+                let mut required = Vec::new();
+                for item in list.iter() {
+                    if let Ok(s) = item.extract::<String>() {
+                        required.push(s);
+                    }
+                }
                 rules.push(ValidationRule::CheckRequired(required));
             }
         }
         
         // Compile min/max
-        if let Some(min_val) = schema.get_item("minimum")? {
-            if let Some(num) = min_val.downcast_ref::<PyFloat>() {
-                rules.push(ValidationRule::CheckMin(num.value()));
+        if let Ok(Some(min_val)) = schema.get_item("minimum") {
+            if let Ok(num) = min_val.extract::<f64>() {
+                rules.push(ValidationRule::CheckMin(num));
             }
         }
         
-        if let Some(max_val) = schema.get_item("maximum")? {
-            if let Some(num) = max_val.downcast_ref::<PyFloat>() {
-                rules.push(ValidationRule::CheckMax(num.value()));
+        if let Ok(Some(max_val)) = schema.get_item("maximum") {
+            if let Ok(num) = max_val.extract::<f64>() {
+                rules.push(ValidationRule::CheckMax(num));
             }
         }
         
@@ -163,10 +166,9 @@ impl RustSchemaValidator {
     /// Fast validation without compilation (inline)
     fn validate_fast(&self, data: &PyDict, schema: &PyDict) -> PyResult<bool> {
         // Type check
-        if let Some(type_val) = schema.get_item("type")? {
-            if let Some(type_str) = type_val.downcast_ref::<PyString>() {
-                let expected_type = type_str.to_str()?;
-                match expected_type {
+        if let Ok(Some(type_val)) = schema.get_item("type") {
+            if let Ok(expected_type) = type_val.extract::<String>() {
+                match expected_type.as_str() {
                     "object" => {
                         if !data.is_instance_of::<PyDict>() {
                             return Ok(false);
@@ -183,11 +185,12 @@ impl RustSchemaValidator {
         }
         
         // Required fields check (optimized)
-        if let Some(required_val) = schema.get_item("required")? {
-            if let Some(list) = required_val.downcast_ref::<PyList>() {
+        if let Ok(Some(required_val)) = schema.get_item("required") {
+            if let Ok(list) = required_val.downcast::<PyList>() {
                 for required_item in list.iter() {
-                    if let Some(key) = required_item.downcast_ref::<PyString>() {
-                        if data.get_item(key)?.is_none() {
+                    if let Ok(key) = required_item.extract::<String>() {
+                        let key_py = PyString::new(data.py(), &key);
+                        if data.get_item(key_py)?.is_none() {
                             return Ok(false);
                         }
                     }
@@ -219,6 +222,132 @@ impl RustSchemaValidator {
     }
 }
 
+/// Ultra-fast response builder with zero Python overhead
+#[pyclass(freelist=128)]  // Object pooling for better performance
+struct RustResponse {
+    code: i32,
+    message: String,
+    data: Option<PyObject>,
+    timestamp: Option<f64>,
+}
+
+#[pymethods]
+impl RustResponse {
+    #[new]
+    #[pyo3(signature = (code=200, message="Success", data=None, timestamp=None))]
+    fn new(
+        code: i32,
+        message: &str,
+        data: Option<PyObject>,
+        timestamp: Option<f64>,
+    ) -> Self {
+        RustResponse {
+            code,
+            message: message.to_string(),
+            data,
+            timestamp,
+        }
+    }
+
+    /// Build response dict in Rust (no Python callback)
+    fn to_dict(&self, py: Python) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
+        dict.set_item("code", self.code)?;
+        dict.set_item("message", &self.message)?;
+        
+        // Add data if present
+        if let Some(ref data) = self.data {
+            dict.set_item("data", data)?;
+        } else {
+            dict.set_item("data", py.None())?;
+        }
+        
+        // Add timestamp only if requested (performance optimization)
+        if let Some(ts) = self.timestamp {
+            dict.set_item("timestamp", ts)?;
+        } else {
+            // Only call time.time() if explicitly needed
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64();
+            dict.set_item("timestamp", now)?;
+        }
+        
+        Ok(dict.into())
+    }
+
+    /// Serialize to JSON directly in Rust (ultra-fast)
+    fn to_json(&self) -> PyResult<String> {
+        let mut map = Map::new();
+        map.insert("code".to_string(), Value::Number(self.code.into()));
+        map.insert("message".to_string(), Value::String(self.message.clone()));
+        
+        // Add data - requires Python for conversion
+        let data_value = Python::with_gil(|py| {
+            if let Some(ref data) = self.data {
+                python_to_value(data.as_ref(py))
+            } else {
+                Ok(Value::Null)
+            }
+        })?;
+        map.insert("data".to_string(), data_value);
+        
+        // Add timestamp
+        let timestamp = self.timestamp.unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64()
+        });
+        map.insert("timestamp".to_string(), Value::Number(
+            serde_json::Number::from_f64(timestamp).unwrap()
+        ));
+        
+        // Serialize to JSON string
+        serde_json::to_string(&map)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    /// Create success response (convenience method)
+    #[staticmethod]
+    #[pyo3(signature = (data=None, message="Success"))]
+    fn success(_py: Python, data: Option<PyObject>, message: &str) -> PyResult<Self> {
+        // Direct construction without GIL operations
+        Ok(RustResponse {
+            code: 200,
+            message: message.to_string(),
+            data,  // Store PyObject directly (no conversion)
+            timestamp: None, // No timestamp for performance
+        })
+    }
+
+    /// Create error response (convenience method)
+    #[staticmethod]
+    #[pyo3(signature = (message="Error", code=500, error_detail=None))]
+    fn error(
+        py: Python,
+        message: &str,
+        code: i32,
+        error_detail: Option<PyObject>,
+    ) -> PyResult<Self> {
+        let data = if let Some(detail) = error_detail {
+            let dict = PyDict::new(py);
+            dict.set_item("error_detail", detail)?;
+            Some(dict.into())
+        } else {
+            None
+        };
+        
+        Ok(RustResponse {
+            code,
+            message: message.to_string(),
+            data,
+            timestamp: None,
+        })
+    }
+}
+
 /// Ultra-fast JSON serializer
 #[pyfunction]
 fn rust_serialize(obj: &PyAny) -> PyResult<PyObject> {
@@ -245,47 +374,42 @@ fn rust_deserialize(json: &str) -> PyResult<PyObject> {
 /// Batch serialization for maximum throughput
 #[pyfunction]
 fn rust_serialize_batch(items: &PyList) -> PyResult<Vec<String>> {
-    use rayon::prelude::*;
-    
-    let results: Result<Vec<_>, _> = items
-        .iter()
-        .collect::<Vec<_>>()
-        .par_iter()
-        .map(|item| {
-            let value = python_to_value(item)?;
-            serde_json::to_string(&value)
-                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-        })
-        .collect();
-    
-    results
+    // Convert to Vec first, then process sequentially (simpler and more reliable)
+    let mut results = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        let value = python_to_value(item)?;
+        let json = serde_json::to_string(&value)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        results.push(json);
+    }
+    Ok(results)
 }
 
 // Helper functions for Python <-> Rust conversion
 fn python_to_value(obj: &PyAny) -> PyResult<Value> {
     if obj.is_none() {
         Ok(Value::Null)
-    } else if let Some(b) = obj.downcast_ref::<PyBool>() {
-        Ok(Value::Bool(b.is_true()))
-    } else if let Some(i) = obj.downcast_ref::<PyInt>() {
-        Ok(Value::Number(i.extract::<i64>()?.into()))
-    } else if let Some(f) = obj.downcast_ref::<PyFloat>() {
-        Ok(Value::Number(serde_json::Number::from_f64(f.value()).unwrap()))
-    } else if let Some(s) = obj.downcast_ref::<PyString>() {
-        Ok(Value::String(s.to_str()?.to_string()))
-    } else if let Some(list) = obj.downcast_ref::<PyList>() {
+    } else if obj.is_instance_of::<PyBool>() {
+        Ok(Value::Bool(obj.extract::<bool>()?))
+    } else if obj.is_instance_of::<PyInt>() {
+        Ok(Value::Number(obj.extract::<i64>()?.into()))
+    } else if obj.is_instance_of::<PyFloat>() {
+        Ok(Value::Number(serde_json::Number::from_f64(obj.extract::<f64>()?).unwrap()))
+    } else if obj.is_instance_of::<PyString>() {
+        Ok(Value::String(obj.extract::<String>()?))
+    } else if obj.is_instance_of::<PyList>() {
+        let list = obj.downcast::<PyList>()?;
         let vec: Result<Vec<_>, _> = list.iter().map(python_to_value).collect();
         Ok(Value::Array(vec?))
-    } else if let Some(dict) = obj.downcast_ref::<PyDict>() {
-        let map: Result<serde_json::Map<_, _>, _> = dict
-            .iter()
-            .map(|(k, v)| {
-                let key = k.downcast_ref::<PyString>()?.to_str()?.to_string();
-                let value = python_to_value(v)?;
-                Ok((key, value))
-            })
-            .collect();
-        Ok(Value::Object(map?))
+    } else if obj.is_instance_of::<PyDict>() {
+        let dict = obj.downcast::<PyDict>()?;
+        let mut map = serde_json::Map::new();
+        for (k, v) in dict.iter() {
+            let key = k.extract::<String>()?;
+            let value = python_to_value(v)?;
+            map.insert(key, value);
+        }
+        Ok(Value::Object(map))
     } else {
         Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type"))
     }
@@ -324,6 +448,7 @@ fn value_to_python(py: Python, value: &Value) -> PyObject {
 fn rust_backend(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustMemoryArena>()?;
     m.add_class::<RustSchemaValidator>()?;
+    m.add_class::<RustResponse>()?;
     m.add_function(wrap_pyfunction!(rust_serialize, m)?)?;
     m.add_function(wrap_pyfunction!(rust_deserialize, m)?)?;
     m.add_function(wrap_pyfunction!(rust_serialize_batch, m)?)?;

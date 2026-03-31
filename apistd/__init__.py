@@ -5,7 +5,7 @@ APISTD - 让 FastAPI/Flask 开发更简单
 """
 
 # Core components
-from core.response import Response, SuccessResponse, ErrorResponse
+from core.response import Response, SuccessResponse, ErrorResponse, Success, Error
 from core.exceptions import APIException, ValidationError, NotFoundError, AuthenticationError, AuthorizationError
 from core.status import StatusCode
 
@@ -42,12 +42,21 @@ try:
 except ImportError:
     OPTIMIZATION_AVAILABLE = False
 
+# Rust backend (optional - high performance)
+try:
+    from optimization.backend import RustResponse, RUST_AVAILABLE
+except ImportError:
+    RustResponse = None
+    RUST_AVAILABLE = False
+
 __version__ = "1.0.0"
 __all__ = [
     # Core
     "Response",
     "SuccessResponse",
     "ErrorResponse",
+    "Success",  # Smart factory
+    "Error",    # Smart factory
     "APIException",
     "ValidationError",
     "NotFoundError",
@@ -86,4 +95,8 @@ __all__ = [
     "LRUCache",
     "BatchedProcessor",
     "OPTIMIZATION_AVAILABLE",
+    
+    # Rust backend (if available)
+    "RustResponse",
+    "RUST_AVAILABLE",
 ]

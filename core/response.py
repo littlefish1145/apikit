@@ -13,23 +13,52 @@ except ImportError:
     _json_serializer = None
     _use_optimization = False
 
+# Try to use Rust backend for maximum performance
+try:
+    from optimization.backend import RustResponse, RUST_AVAILABLE
+    _rust_available = RUST_AVAILABLE
+except ImportError:
+    _rust_available = False
+    RustResponse = None
+
+# Fast path: Use __slots__ and avoid method calls in hot path
+class FastResponse:
+    """Minimal overhead response for performance-critical paths"""
+    __slots__ = ['code', 'message', 'data']
+    
+    def __init__(self, code: int = 200, message: str = "Success", data: Any = None):
+        self.code = code
+        self.message = message
+        self.data = data
+    
+    def to_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "message": self.message,
+            "data": self.data
+        }
+
 from core.constants import ResponseFields
 from config import get_config
 from formats.registry import ResponseFormatterRegistry
 
 
 class Response:
+    __slots__ = ['code', 'message', 'data', 'timestamp']
+    
     def __init__(
         self,
         code: int = 200,
         message: str = "",
         data: Any = None,
-        timestamp: float = None
+        timestamp: Optional[float] = None
     ):
         self.code = code
         self.message = message
         self.data = data
-        self.timestamp = timestamp or time.time()
+        # Only set timestamp if explicitly requested (for debugging/timing)
+        # This reduces object creation overhead in performance-critical paths
+        self.timestamp = timestamp
 
     def to_dict(self, debug: bool = False) -> dict:
         config = get_config()
@@ -118,3 +147,48 @@ class ErrorResponse(Response):
                 result[ResponseFields.ERROR_DETAIL] = self.error_detail
 
         return result
+
+
+# ============================================================================
+# Smart Response Factory - Auto-select Rust or Python implementation
+# ============================================================================
+
+def Success(data: Any = None, message: str = "Success", code: int = 200, use_rust: bool = True, fast: bool = False):
+    """
+    Smart success response factory - automatically uses fastest implementation
+    
+    Args:
+        data: Response data
+        message: Success message
+        code: HTTP status code
+        use_rust: If True and Rust backend available, use RustResponse
+        fast: If True, use FastResponse (minimal overhead, Python only)
+    
+    Returns:
+        FastResponse (if fast=True), RustResponse (if use_rust=True), or SuccessResponse
+    """
+    if fast:
+        return FastResponse(code=code, message=message, data=data)
+    elif use_rust and _rust_available:
+        return RustResponse.success(data=data, message=message)
+    else:
+        return SuccessResponse(data=data, message=message, code=code)
+
+
+def Error(message: str = "Error", code: int = 500, error_detail: Any = None, use_rust: bool = True):
+    """
+    Smart error response factory - automatically uses Rust implementation if available
+    
+    Args:
+        message: Error message
+        code: HTTP status code
+        error_detail: Detailed error information
+        use_rust: If True and Rust backend available, use RustResponse (faster)
+    
+    Returns:
+        RustResponse (if available and use_rust=True) or ErrorResponse
+    """
+    if use_rust and _rust_available:
+        return RustResponse.error(message=message, code=code, error_detail=error_detail)
+    else:
+        return ErrorResponse(message=message, code=code, error_detail=error_detail)
