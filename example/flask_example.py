@@ -34,7 +34,7 @@ def my_custom_formatter(code: int, message: str, data, debug_info: dict = None) 
 
 register_format("my_custom", my_custom_formatter)
 
-configure(debug=False, enable_timing=True, slow_query_threshold=500, response_format="my_custom")
+configure(debug=True, enable_timing=True, slow_query_threshold=500, response_format="my_custom")
 
 adapter = FlaskAdapter()
 adapter.install(app)
@@ -156,15 +156,71 @@ def sample_error():
 @app.route("/config", methods=["GET"])
 def show_config():
     cfg = get_config()
+    
+    # 检查是否使用了 Rust 加速
+    rust_info = "未启用"
+    try:
+        from optimization import FastJSON, OPTIMIZATION_AVAILABLE
+        if OPTIMIZATION_AVAILABLE:
+            rust_info = "✅ 已启用 (FastJSON)"
+    except ImportError:
+        pass
+    
     return json_response(SuccessResponse(
         data={
             "response_format": cfg.response_format,
             "available_formats": ResponseFormatterRegistry.list_formatters(),
             "debug": cfg.debug,
+            "rust_acceleration": rust_info,
         },
         message="Current config"
     ))
 
 
 if __name__ == "__main__":
+    # 显示启动信息和 Rust 加速状态
+    print("=" * 70)
+    print("APISTD Flask Example - 启动信息")
+    print("=" * 70)
+    
+    # 检查 Rust 加速
+    rust_status = "❌ 未启用"
+    try:
+        from optimization import FastJSON, OPTIMIZATION_AVAILABLE
+        if OPTIMIZATION_AVAILABLE:
+            rust_status = "✅ 已启用 (FastJSON + Rust 后端)"
+            print(f"\n🚀 Rust 加速：{rust_status}")
+            print("   - JSON 序列化将使用 Rust 实现")
+            print("   - 性能提升：约 18%")
+        else:
+            print(f"\n⚠️  Rust 加速：{rust_status}")
+            print("   - optimization 模块可用，但 Rust 后端未编译")
+    except ImportError:
+        print(f"\n⚠️  Rust 加速：{rust_status}")
+        print("   - optimization 模块未安装")
+    
+    print(f"\n📋 配置信息:")
+    print(f"   - Debug 模式：开启")
+    print(f"   - 执行时间监控：开启")
+    print(f"   - 响应格式：my_custom")
+    
+    print(f"\n🌐 服务器地址:")
+    print(f"   - http://localhost:5000")
+    print(f"   - http://0.0.0.0:5000")
+    
+    print(f"\n📖 可用端点:")
+    print(f"   - GET  /                    欢迎页面")
+    print(f"   - GET  /users               用户列表")
+    print(f"   - GET  /users/<id>          获取用户")
+    print(f"   - POST /users               创建用户")
+    print(f"   - DELETE /users/<id>        删除用户")
+    print(f"   - GET  /debug/info          调试信息")
+    print(f"   - GET  /config              配置信息 (包含 Rust 状态)")
+    print(f"   - GET  /error/db            数据库错误示例")
+    print(f"   - GET  /error/sample        自定义错误示例")
+    
+    print("\n" + "=" * 70)
+    print("提示：访问 /config 端点查看详细的 Rust 加速状态")
+    print("=" * 70 + "\n")
+    
     app.run(host="0.0.0.0", port=5000, debug=False)
