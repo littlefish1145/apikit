@@ -71,6 +71,8 @@ jobs:
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           cp "optimization/backend/rust_backend/target/release/${{ matrix.artifact_name }}" "optimization/backend/rust_backend.pyd"
+        elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          cp "optimization/backend/rust_backend/target/release/${{ matrix.artifact_name }}" "optimization/backend/rust_backend_lib.so"
         else
           cp "optimization/backend/rust_backend/target/release/${{ matrix.artifact_name }}" "optimization/backend/rust_backend_lib.so"
         fi
