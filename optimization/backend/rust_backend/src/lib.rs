@@ -8,6 +8,9 @@
 //! 
 //! Note: This is OPTIONAL. The core value of APISTD is in Python implementation.
 
+// Allow PyO3 macro warnings (non-local definitions are expected with PyO3)
+#![allow(non_local_definitions)]
+
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBytes, PyString, PyBool, PyInt, PyFloat};
 use serde_json::{Value, Map};
@@ -51,7 +54,7 @@ impl RustMemoryArena {
         }
         
         // Allocate new block if needed
-        let mut new_block = vec![0u8; size.max(self.block_size)];
+        let new_block = vec![0u8; size.max(self.block_size)];
         let data = &new_block[..size];
         let result = PyBytes::new(py, data).into();
         blocks.push(new_block);
@@ -78,6 +81,7 @@ struct RustSchemaValidator {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]  // Fields used for future full validation implementation
 enum ValidationRule {
     CheckType(String),
     CheckRequired(Vec<String>),
