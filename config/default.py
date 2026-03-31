@@ -9,6 +9,8 @@ DEFAULT_CONFIG = {
     "enable_sql_log": False,
     "slow_query_threshold": 100,
     "response_format": "default",
+    "enable_optimization": True,  # Enable performance optimizations
+    "optimization_level": "auto",  # auto, fast, safe
     "before_hooks": [],
     "after_hooks": [],
     "timestamp_format": "iso",
@@ -24,6 +26,8 @@ class ConfigSchema:
     enable_sql_log: bool = False
     slow_query_threshold: float = 100
     response_format: str = "default"
+    enable_optimization: bool = True  # Enable performance optimizations
+    optimization_level: str = "auto"  # auto, fast, safe
     before_hooks: List[Callable] = field(default_factory=list)
     after_hooks: List[Callable] = field(default_factory=list)
     timestamp_format: str = "iso"
@@ -37,6 +41,8 @@ class ConfigSchema:
             "enable_sql_log": self.enable_sql_log,
             "slow_query_threshold": self.slow_query_threshold,
             "response_format": self.response_format,
+            "enable_optimization": self.enable_optimization,
+            "optimization_level": self.optimization_level,
             "before_hooks": self.before_hooks,
             "after_hooks": self.after_hooks,
             "timestamp_format": self.timestamp_format,

@@ -1,283 +1,507 @@
-# apistd - API Response Standardization
+# APISTD - 让 FastAPI/Flask 开发更简单
 
-让 Python Web 框架的 API 响应格式统一、可定制、易调试。
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-supported-green.svg)](https://fastapi.tiangolo.com/)
+[![Flask](https://img.shields.io/badge/Flask-supported-green.svg)](https://flask.palletsprojects.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-统一 FastAPI 和 Flask 的 API 响应格式，提供灵活的调试模式和自定义响应格式支持。
+**统一的 API 响应标准 · 强大的调试工具 · 优雅的错误处理 · Rust 性能加速**
 
-## 特性
+APISTD 是一个开发者体验（DX）增强框架，让 FastAPI 和 Flask 应用开发更简单、更规范、调试更方便。
 
-- ✅ **统一响应格式**：为 FastAPI 和 Flask 提供一致的 API 响应格式
-- ✅ **自定义格式**：支持注册自定义响应格式转换器
-- ✅ **调试模式**：可选的增强调试信息（执行时间、内存使用、请求 ID）
-- ✅ **错误处理**：标准化的错误响应，支持详细错误信息
-- ✅ **分页支持**：内置分页功能
-- ✅ **请求追踪**：自动添加请求 ID 和执行时间
+---
 
-## 安装
+## ✨ 核心特性
+
+### 🎯 统一的 API 响应
+- **标准化返回**: 统一的响应格式（code, message, data）
+- **多格式支持**: 支持 standard、alibaba 等多种格式
+- **类型安全**: 完整的类型注解
+
+### 🐛 强大的调试
+- **请求追踪**: 自动添加 Request ID
+- **性能监控**: 执行时间、内存使用
+- **调试面板**: 详细的调试信息
+- **异常捕获**: 统一的错误处理
+
+### 🔌 框架集成
+- **FastAPI**: 完整支持（含 Rust 加速）
+- **Flask**: 完整支持（含 Rust 加速）
+- **可扩展**: 易于添加新框架
+
+### 🧩 丰富扩展
+- **分页支持**: 内置分页工具
+- **数据验证**: 增强的验证功能
+- **数据库**: 连接池管理
+
+### ⚡ 性能优化（可选）
+- **Rust 后端**: PyO3 实现的零拷贝序列化
+- **FastJSON**: 自动选择最优 JSON 后端（Rust > orjson > ujson > json）
+- **批量处理**: 大数据集性能优化
+
+---
+
+## 📦 安装
 
 ```bash
-# 从源码安装
-pip install -e .
+# 基础安装（仅核心功能）
+pip install fastapi  # 或 flask
 
-# 安装 FastAPI 支持
-pip install fastapi uvicorn
+# 可选：性能优化（需要时）
+pip install orjson
 
-# 安装 Flask 支持
-pip install flask
+# 可选：Rust 后端加速（需要 Rust 环境）
+cd optimization/backend/rust_backend
+cargo build --release
 ```
 
-## 快速开始
+---
+
+## 🎯 快速开始
+
+### 统一导入接口
+
+```python
+from apistd import (
+    SuccessResponse, ErrorResponse,
+    APIException, ValidationError,
+    FastAPIAdapter, FlaskAdapter,
+    configure, get_request_id, get_execution_time
+)
+```
 
 ### FastAPI 示例
 
 ```python
 from fastapi import FastAPI
-from apistd import (
-    SuccessResponse, 
-    FastAPIAdapter, 
-    FormattedJSONResponse,
-    configure
-)
-from core.exceptions import NotFoundError
+from apistd import SuccessResponse, APIException, FastAPIAdapter, configure
 
 app = FastAPI()
 
-# 配置
-configure(debug=False, enable_timing=True)
+# 配置 APISTD
+configure(debug=True, enable_timing=True)
 
 # 安装适配器
 adapter = FastAPIAdapter()
 adapter.install(app)
 
-def json_response(response):
-    return FormattedJSONResponse(content=response.to_dict(), status_code=response.code)
-
 @app.get("/users/{user_id}")
-async def get_user(user_id: int):
-    user = get_user_from_db(user_id)  # 你的数据库查询
-    if not user:
-        raise NotFoundError(message=f"User {user_id} not found")
-    
-    return json_response(SuccessResponse(data=user, message="User found"))
+async def get_user(user_id: str):
+    """获取用户信息"""
+    return SuccessResponse(data={"user_id": user_id, "name": "Test"})
+
+@app.post("/users")
+async def create_user(name: str):
+    """创建用户"""
+    if not name:
+        raise APIException(message="Name is required", status_code=400)
+    return SuccessResponse(data={"name": name}, message="Created")
 ```
 
 ### Flask 示例
 
 ```python
 from flask import Flask
-from apistd import (
-    SuccessResponse,
-    FlaskAdapter,
-    configure
-)
-from core.exceptions import NotFoundError
-from framework.flask import formatted_jsonify
+from apistd import SuccessResponse, FlaskAdapter, configure
 
 app = Flask(__name__)
 
-# 配置
-configure(debug=False, enable_timing=True)
+# 配置 APISTD
+configure(debug=True, enable_timing=True)
 
 # 安装适配器
 adapter = FlaskAdapter()
 adapter.install(app)
 
-def json_response(response):
-    return formatted_jsonify(response.to_dict()), response.code
-
-@app.route("/users/<int:user_id>")
+@app.route('/users/<user_id>')
 def get_user(user_id):
-    user = get_user_from_db(user_id)  # 你的数据库查询
-    if not user:
-        raise NotFoundError(message=f"User {user_id} not found")
-    
-    return json_response(SuccessResponse(data=user, message="User found"))
+    return SuccessResponse(data={"user_id": user_id})
 ```
 
-## 响应格式
-
-### 默认响应结构
-
-```json
-{
-  "code": 200,
-  "message": "Success",
-  "data": {...},
-  "timestamp": 1234567890
-}
-```
-
-### 错误响应
-
-```json
-{
-  "code": 404,
-  "message": "User not found",
-  "data": null,
-  "timestamp": 1234567890,
-  "error_detail": {
-    "type": "NotFoundError",
-    "message": "User with id 5 not found"
-  }
-}
-```
-
-### Debug 模式响应
-
-当 `debug=True` 时，响应会包含额外的调试信息：
-
-```json
-{
-  "code": 200,
-  "message": "Success",
-  "data": {...},
-  "timestamp": 1234567890,
-  "_debug": {
-    "execution_time_ms": 15.23,
-    "memory_mb": 45.67,
-    "request_id": "abc-123-def"
-  }
-}
-```
-
-## 配置选项
+### 调试模式
 
 ```python
 from apistd import configure
 
 configure(
-    debug=False,                    # 启用调试模式
-    enable_timing=True,            # 启用执行时间追踪
-    slow_query_threshold=500,      # 慢查询阈值（毫秒）
-    response_format="default",     # 响应格式名称
-    request_id_header="X-Request-ID"  # 请求 ID 头部名称
+    debug=True,              # 开启调试模式
+    response_format="standard",  # 响应格式：standard/alibaba
+    request_id_header="X-Request-ID",
+    enable_timing=True,      # 启用执行时间
+    enable_optimization=True # 启用性能优化（Rust 后端）
 )
 ```
 
-## 自定义响应格式
+---
 
+## 📖 核心功能
+
+### 1. 统一响应格式
+
+#### SuccessResponse - 成功响应
 ```python
-from apistd import register_format
+from apistd import SuccessResponse
 
-def my_custom_format(code: int, message: str, data, debug_info: dict = None) -> dict:
-    result = {
-        "status": code,
-        "msg": message,
-        "result": data,
-        "ts": int(time.time())
-    }
-    if debug_info:
-        result["_debug"] = debug_info
-    return result
+# 简单用法
+return SuccessResponse(data={"key": "value"})
 
-# 注册自定义格式
-register_format("my_custom", my_custom_format)
+# 自定义消息
+return SuccessResponse(data=data, message="Operation successful")
 
-# 使用自定义格式
-configure(response_format="my_custom")
+# 自定义状态码
+return SuccessResponse(data=data, code=201)
 ```
 
-## 内置异常类型
-
+#### ErrorResponse - 错误响应
 ```python
-from core.exceptions import (
-    APIException,        # 基础异常
-    ValidationError,     # 验证错误 (422)
-    AuthenticationError, # 认证错误 (401)
-    AuthorizationError,  # 授权错误 (403)
-    NotFoundError,       # 资源不存在 (404)
-    InternalError,       # 服务器错误 (500)
-    DatabaseError        # 数据库错误 (500)
-)
+from apistd import ErrorResponse
 
-# 使用示例
-raise NotFoundError(
-    message="User not found",
-    error_detail={"user_id": 123},
-    context={"attempted_at": "2024-01-01"}
+return ErrorResponse(
+    message="Invalid input",
+    code=400,
+    error_detail={"field": "required"}
 )
 ```
 
-## 分页支持
-
+#### 响应格式
 ```python
-from apistd import paginate, PageResult
-
-@app.get("/users")
-async def list_users(page: int = 1, page_size: int = 10):
-    items = get_users_from_db()  # 你的数据库查询
-    result = paginate(items, total=100, page=page, page_size=page_size)
-    
-    return json_response(result.to_response())
-```
-
-分页响应：
-
-```json
+# Standard 格式（默认）
 {
-  "code": 200,
-  "message": "Success",
-  "data": {
-    "items": [...],
-    "total": 100,
-    "page": 1,
-    "page_size": 10,
-    "total_pages": 10
-  }
+    "code": 200,
+    "message": "Success",
+    "data": {...},
+    "timestamp": 1234567890.123
+}
+
+# Alibaba 格式
+{
+    "Code": 200,
+    "Message": "Success",
+    "Data": {...},
+    "RequestId": "xxx-xxx-xxx"
 }
 ```
 
-## 请求 ID 和执行时间
+### 2. 统一异常处理
 
+```python
+from apistd import APIException, ValidationError, NotFoundError
+
+# 抛出异常（自动捕获并格式化）
+raise APIException(
+    message="Resource not found",
+    status_code=404,
+    error_detail={"resource_id": "123"}
+)
+
+# 预定义异常
+raise NotFoundError(message="User not found")
+raise ValidationError(message="Invalid input")
+raise AuthenticationError(message="Token expired")
+```
+
+### 3. 调试功能
+
+#### 请求头信息
+```
+X-Request-ID: abc-123-def      # 请求追踪 ID
+X-Execution-Time: 45.23ms      # 执行时间
+X-Debug-Memory: 125.5MB        # 内存使用（debug 模式）
+```
+
+#### 获取调试信息
 ```python
 from apistd import get_request_id, get_execution_time
 
 @app.get("/debug")
 async def debug_info():
-    return json_response(SuccessResponse(
-        data={
-            "request_id": get_request_id(),
-            "execution_time_ms": get_execution_time()
-        }
-    ))
+    return SuccessResponse(data={
+        "request_id": get_request_id(),
+        "execution_time_ms": get_execution_time()
+    })
 ```
 
-## 运行示例
+### 4. 分页支持
+
+```python
+from apistd import PageResult, paginate
+
+@app.get("/users")
+async def list_users(page: int = 1, page_size: int = 20):
+    users = get_users(page, page_size)
+    
+    result = paginate(users, total=100, page=page, page_size=page_size)
+    return SuccessResponse(data=result)
+```
+
+### 5. 性能优化（可选）
+
+```python
+from apistd import FastJSON, OPTIMIZATION_AVAILABLE
+
+if OPTIMIZATION_AVAILABLE:
+    # 使用 Rust 加速的 JSON 序列化
+    json_serializer = FastJSON()
+    json_bytes = json_serializer.dumps(large_data)
+```
+
+---
+
+## 🏗️ 项目结构
+
+```
+apikit/
+├── apistd/                  # 统一导出模块
+│   └── __init__.py          # 便捷导入接口
+├── core/                    # 核心功能
+│   ├── response.py          # 统一响应类（Rust 加速）
+│   ├── exceptions.py        # 统一异常类
+│   └── status.py            # 状态码定义
+├── framework/               # 框架适配层
+│   ├── fastapi.py           # FastAPI 集成（Rust 加速）
+│   ├── flask.py             # Flask 集成（Rust 加速）
+│   └── base.py              # 基础适配器
+├── middleware/              # 中间件
+│   ├── request_id.py        # 请求 ID 追踪
+│   └── timer.py             # 性能计时
+├── formats/                 # 响应格式
+│   ├── registry.py          # 格式注册表
+│   ├── standard.py          # 标准格式
+│   └── alibaba.py           # 阿里格式
+├── extensions/              # 扩展功能
+│   ├── pagination.py        # 分页
+│   └── validation.py        # 验证增强
+├── config/                  # 配置管理
+│   └── default.py           # 默认配置
+└── optimization/            # 性能优化（可选）
+    ├── serializer/          # 序列化加速
+    │   └── fast_json.py     # FastJSON 实现
+    └── backend/             # Rust 后端
+        └── rust_backend/    # PyO3 实现
+```
+
+---
+
+## 🔧 高级用法
+
+### 自定义响应格式
+
+```python
+from apistd import register_format
+
+def my_custom_formatter(code: int, message: str, data, debug_info=None) -> dict:
+    return {
+        "status": code,
+        "msg": message,
+        "result": data,
+        "ts": int(time.time())
+    }
+
+register_format("my_custom", my_custom_formatter)
+configure(response_format="my_custom")
+```
+
+### 自定义异常
+
+```python
+from apistd import APIException
+
+class UserNotFoundException(APIException):
+    status_code = 404
+    
+    def __init__(self, user_id: str):
+        super().__init__(
+            message=f"User {user_id} not found",
+            error_detail={"user_id": user_id}
+        )
+
+# 使用
+raise UserNotFoundException("123")
+```
+
+### 使用 FormattedJSONResponse（FastAPI）
+
+```python
+from apistd import FormattedJSONResponse, SuccessResponse
+
+@app.get("/")
+async def root():
+    response = SuccessResponse(data={"message": "Hello"})
+    return FormattedJSONResponse(content=response.to_dict())
+```
+
+---
+
+## 📊 调试模式 vs 生产模式
+
+### Debug=True
+```json
+{
+    "code": 404,
+    "message": "Not found",
+    "data": null,
+    "timestamp": 1234567890.123,
+    "_debug": {
+        "memory_mb": 125.5,
+        "cpu_percent": 12.3,
+        "execution_time_ms": 45.23,
+        "request_id": "abc-123-def"
+    }
+}
+```
+
+### Debug=False
+```json
+{
+    "code": 404,
+    "message": "Not found",
+    "data": null
+}
+```
+
+---
+
+## 🆚 与其他框架对比
+
+| 特性 | APISTD | FastAPI 原生 | Flask 原生 |
+|------|--------|------------|-----------|
+| **统一响应格式** | ✅ | ❌ | ❌ |
+| **异常自动处理** | ✅ | 部分 | ❌ |
+| **请求追踪** | ✅ | ❌ | ❌ |
+| **调试面板** | ✅ | ❌ | ❌ |
+| **多格式支持** | ✅ | ❌ | ❌ |
+| **开箱即用** | ✅ | ❌ | ❌ |
+| **Rust 加速** | ✅ | ❌ | ❌ |
+
+---
+
+## 📝 最佳实践
+
+### 1. 始终使用统一响应
+```python
+# ✅ 推荐
+return SuccessResponse(data=user)
+
+# ❌ 不推荐
+return {"user": user}
+```
+
+### 2. 使用异常而非错误码
+```python
+# ✅ 推荐
+raise NotFoundError(message="User not found")
+
+# ❌ 不推荐
+return {"error": "not found", "code": 404}
+```
+
+### 3. 开发时开启 Debug
+```python
+configure({"debug": True})  # 开发环境
+configure({"debug": False}) # 生产环境
+```
+
+### 4. 使用 Request ID 追踪
+```python
+# 所有响应自动包含 X-Request-ID
+# 便于日志追踪和调试
+```
+
+### 5. 启用性能优化
+```python
+# 生产环境建议启用
+configure(enable_optimization=True)
+```
+
+---
+
+## 🧪 测试
 
 ```bash
-# 安装依赖
-cd example
-pip install -r requirements.txt
+# 运行示例
+python example/flask_example.py
+python example/fastapi_example.py
 
-# 运行 FastAPI 示例
-python fastapi_example.py
-# 访问 http://localhost:8000
+# 运行测试
+python tests/test_init.py
 
-# 运行 Flask 示例
-python flask_example.py
-# 访问 http://localhost:5000
+# 性能基准（可选）
+python tests/test_performance.py
 ```
 
-## 项目结构
+---
 
-```
-apistd/
-├── config/          # 配置管理
-├── core/            # 核心功能（响应、异常、状态码）
-├── debug/           # 调试工具
-├── extensions/      # 扩展功能（分页、验证、数据库）
-├── formats/         # 响应格式
-├── framework/       # 框架适配器（FastAPI、Flask）
-├── middleware/      # 中间件（请求 ID、计时器、调试）
-├── migration/       # 迁移工具
-├── example/         # 示例代码
-└── README.md        # 本文档
-```
+## 📚 API 参考
 
-## 许可证
+### Core
+- `Response` - 基础响应类
+- `SuccessResponse` - 成功响应
+- `ErrorResponse` - 错误响应
+- `APIException` - 统一异常
+- `ValidationError` - 验证错误
+- `NotFoundError` - 未找到错误
+- `StatusCode` - 状态码常量
 
-MIT License
+### Framework
+- `FastAPIAdapter` - FastAPI 集成
+- `FlaskAdapter` - Flask 集成
+- `FormattedJSONResponse` - FastAPI 格式化响应
 
-## 贡献
+### Extensions
+- `PageResult` - 分页结果
+- `paginate` - 分页工具函数
+
+### Config
+- `configure` - 配置函数
+- `get_config` - 获取配置
+
+### Middleware
+- `get_request_id` - 获取请求 ID
+- `get_execution_time` - 获取执行时间
+
+### Format Registry
+- `ResponseFormatterRegistry` - 格式注册表
+- `register_format` - 注册格式函数
+
+### Optimization (Optional)
+- `FastJSON` - 快速 JSON 序列化
+- `OPTIMIZATION_AVAILABLE` - 优化模块是否可用
+
+---
+
+## 🎯 适用场景
+
+### ✅ 适合
+- 需要统一 API 风格的项目
+- 需要快速开发的创业公司
+- 需要强大调试功能的团队
+- 多框架混合使用的环境
+- 对性能有要求的场景（启用 Rust 后端）
+
+### ❌ 不适合
+- 已有完整框架体系的项目
+- 不需要统一响应规范的项目
+
+---
+
+## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
+
+```bash
+git clone https://github.com/apistd/apikit.git
+cd apikit
+pip install -e .
+```
+
+---
+
+## 📧 联系方式
+
+- **GitHub**: https://github.com/apistd
+- **文档**: https://apistd.github.io/docs
+- **问题**: https://github.com/apistd/apikit/issues
+
+---
+
+**APISTD - 让 API 开发更简单！** 🚀

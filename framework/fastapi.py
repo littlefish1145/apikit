@@ -1,4 +1,3 @@
-import json
 import time
 import psutil
 import os
@@ -10,6 +9,16 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Try to use optimized JSON serializer
+try:
+    from optimization import FastJSON
+    _json_serializer = FastJSON()
+    _use_optimization = True
+except ImportError:
+    import json
+    _json_serializer = None
+    _use_optimization = False
 
 from core.response import Response, SuccessResponse, ErrorResponse
 from core.exceptions import APIException
@@ -37,11 +46,19 @@ class FormattedJSONResponse(StarletteResponse):
         super().__init__(content, status_code, headers, media_type, background)
 
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
-            indent=self.indent,
-            ensure_ascii=self.ensure_ascii
-        ).encode("utf-8")
+        """Render content to JSON bytes using optimized serializer"""
+        if _use_optimization and self.indent is None:
+            # Use optimized serializer (no indent for performance)
+            return _json_serializer.dumps(content)
+        else:
+            # Fallback to standard json (supports indent)
+            import json
+            return json.dumps(
+                content,
+                indent=self.indent,
+                ensure_ascii=self.ensure_ascii,
+                separators=(',', ':') if self.indent is None else None
+            ).encode("utf-8")
 
 
 class FastAPIAdapter(FrameworkAdapter):

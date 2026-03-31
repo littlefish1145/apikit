@@ -1,4 +1,3 @@
-import json
 import time
 import psutil
 import os
@@ -6,6 +5,16 @@ import traceback
 from typing import Callable, Optional, Any, Dict
 from flask import Flask, request, jsonify, Response as FlaskResponse, make_response
 from functools import wraps
+
+# Try to use optimized JSON serializer
+try:
+    from optimization import FastJSON
+    _json_serializer = FastJSON()
+    _use_optimization = True
+except ImportError:
+    import json
+    _json_serializer = None
+    _use_optimization = False
 
 from core.response import Response, SuccessResponse, ErrorResponse
 from core.exceptions import APIException
@@ -15,7 +24,28 @@ from middleware.request_id import get_request_id, set_request_id, get_request_st
 
 
 def formatted_jsonify(data, indent=2, ensure_ascii=False):
-    response = make_response(json.dumps(data, indent=indent, ensure_ascii=ensure_ascii))
+    """
+    Create JSON response using optimized serializer when available.
+    
+    When optimization is enabled and no indent is needed, uses FastJSON
+    (orjson/ujson) for better performance. Falls back to standard json
+    when indent is required or optimization is not available.
+    """
+    if _use_optimization and indent is None:
+        # Use optimized serializer (no indent for performance)
+        json_bytes = _json_serializer.dumps(data)
+        response = make_response(json_bytes.decode('utf-8') if isinstance(json_bytes, bytes) else json_bytes)
+    else:
+        # Fallback to standard json (supports indent)
+        import json
+        json_str = json.dumps(
+            data,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            separators=(',', ':') if indent is None else None
+        )
+        response = make_response(json_str)
+    
     response.headers["Content-Type"] = "application/json"
     return response
 

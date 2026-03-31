@@ -1,8 +1,18 @@
-import json
 import time
 import psutil
 import os
 from typing import Any, Optional, Dict
+
+# Try to use optimized JSON serializer if available
+try:
+    from optimization import FastJSON
+    _json_serializer = FastJSON()
+    _use_optimization = True
+except ImportError:
+    import json
+    _json_serializer = None
+    _use_optimization = False
+
 from core.constants import ResponseFields
 from config import get_config
 from formats.registry import ResponseFormatterRegistry
@@ -45,7 +55,16 @@ class Response:
         }
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=False)
+        """Convert response to JSON string using optimized serializer"""
+        data = self.to_dict()
+        
+        if _use_optimization:
+            # Use optimized FastJSON (orjson/ujson/json with optimizations)
+            return _json_serializer.dumps(data).decode('utf-8')
+        else:
+            # Fallback to standard json
+            import json
+            return json.dumps(data, ensure_ascii=False, separators=(',', ':'))
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Response':
